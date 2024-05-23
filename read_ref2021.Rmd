@@ -1,0 +1,92 @@
+---
+title: "REF 2021"
+author: "PenguinJunk"
+date: "2024-05-23"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(readxl)
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(ggsankey)
+```
+
+```{r readxls}
+# read_excel reads both xls and xlsx files
+REF.extract <- read_excel( "C:/Users/izzy_/OneDrive - University College London/thesis data files/REF 2021 Impact Case Studies - Extract - 2024-05-22.xlsx" )
+```
+
+```{r format}
+UKcountries <- c("UK", "UK and Ireland", "Great Britain", "Cymru", "Scotland", "England")
+REF <- 
+  REF.extract |>
+  separate_longer_delim(cols = c(Countries), delim = ";") |> 
+  separate_longer_delim(cols = c(Countries), delim = ",") |> 
+  separate_longer_delim(cols = c(Countries), delim = ":") |> 
+  mutate( Countries = str_remove_all(Countries, "\\["),
+          Countries = str_remove_all(Countries, "]"),
+          Countries = str_squish(Countries),
+          Countries = str_replace_all(Countries, c("United Kingdom" = "UK",
+                                                  "UNITED KINGDOM" = "UK",
+                                                  "UK of Great Britain and Northern Ireland" = "UK",
+                                                  "G3.1\\) UK" = "UK",
+                                                  "G3.2\\) UK" = "UK",
+                                                  "G3.3\\) UK" = "UK",
+                                                  "G3.4\\) UK" = "UK",
+                                                  "G3.5\\) UK" = "UK",
+                                                  "Wales" = "Cymru"
+                                                  )
+                                     )
+         ) |> 
+  filter( Countries %in% UKcountries ) |> 
+  mutate( Countries = factor(Countries, levels = UKcountries)) |> 
+  arrange(Countries) |> 
+  distinct(`REF impact case study identifier`, .keep_all = TRUE) |> 
+  mutate(Assessment_Unit = `Unit of assessment name`,
+         Impact_Type = `Summary impact type`,
+         Country = Countries, 
+         Impacted = `My category`) |>
+  select(Assessment_Unit, Impact_Type, Country, Impacted) 
+
+```
+
+```{r plot}
+
+REF_counts <- 
+  REF |> 
+  make_long(Assessment_Unit, Impact_Type, Impacted)
+
+nodenames <- c("Unit of assessment name", "Summary impact type", "My impact category")
+
+ggplot(
+  REF_counts,
+  aes(
+    x = x, next_x = next_x, node = node,
+    next_node = next_node, fill = factor(node)
+  )
+) +
+  geom_sankey(
+    flow.alpha = .6,
+    node.color = "gray30"
+  ) +
+  geom_sankey_label(
+    aes(
+      x = as.numeric(x) + .05,
+      label = after_stat(paste0(node, "\nn = ", freq))
+    ),
+    size = 8 / .pt, color = "white", fill = "gray40",
+    hjust = 0
+  )  +
+  scale_fill_viridis_d() +
+  theme_sankey(base_size = 4) +
+  scale_x_discrete(labels = nodenames) +
+  theme(legend.position = "none",
+        axis.text.x=element_text(size=10)) +
+  guides(fill = guide_legend(ncol = 2))
+
+ggsave(here("figures/REF_extract_sankey.png"))
+
+```
