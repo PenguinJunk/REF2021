@@ -21,6 +21,11 @@ REF.extract <- read_excel( "C:/Users/izzy_/OneDrive - University College London/
 
 ```{r format}
 UKcountries <- c("UK", "UK and Ireland", "Great Britain", "Cymru", "Scotland", "England")
+assessmentunits <- c("Biological Sciences", "Earth Systems and Environmental Sciences", "Geography and Environmental Studies")
+impacttypes <- c("Environmental", "Political", "Economic")
+endeavourtypes <- c("Descriptive", "Analytic", "Prescriptive")
+impactcat <- c("UK Gov", "UK governance", "UK organisations", "UK society", "other UK", "Int Gov", "Int governance", "Int organisations", "International", "commercial")
+
 REF <- 
   REF.extract |>
   separate_longer_delim(cols = c(Countries), delim = ";") |> 
@@ -42,24 +47,60 @@ REF <-
                                      )
          ) |> 
   filter( Countries %in% UKcountries ) |> 
-  mutate( Countries = factor(Countries, levels = UKcountries)) |> 
+  mutate( Countries = factor(Countries, levels = UKcountries, ordered = TRUE)) |> 
   arrange(Countries) |> 
   distinct(`REF impact case study identifier`, .keep_all = TRUE) |> 
   mutate(Assessment_Unit = `Unit of assessment name`,
          Impact_Type = `Summary impact type`,
          Country = Countries, 
-         Impacted = `My category`) |>
-  select(Assessment_Unit, Impact_Type, Country, Impacted) 
+         Endeavour_Type = factor(Endeavour_Type, levels = endeavourtypes, ordered = TRUE),
+         Impacted = `My category`,
+         Impact_Summary = str_remove_all(`1. Summary of the impact`, "1. Summary of the impact"),
+         Impact_Summary = str_remove_all(Impact_Summary, "1. Summary of Impact"),
+         Impact_Summary = str_remove_all(Impact_Summary, "(indicative maximum 100 words)"),
+         Impact_Summary = str_remove_all(Impact_Summary, "#"),
+#         Impact_Summary = str_remove_all(Impact_Summary, "\\("),
+#         Impact_Summary = str_remove_all(Impact_Summary, "\\)"),
+         Impact_Summary = str_remove_all(Impact_Summary, "\\\\"),
+         Impact_Summary = str_remove_all(Impact_Summary, "\\*"),
+         Impact_Summary = str_remove_all(Impact_Summary, "1. Summary of the impact"),
+         Impact_Summary = str_squish(str_remove_all(Impact_Summary, "\\(\\)"))
+  )
+```
 
+```{r impacts}
+impact_summaries <- 
+  REF |> 
+  select(Title, Impact_Summary)# 
+
+impact_summaries |> 
+  sample_n(1) |> 
+  unite("text", 1:2, sep = "\n\n", remove = TRUE )|> 
+  pull() |> 
+  print()
 ```
 
 ```{r plot}
 
+sankeylevels <- c(assessmentunits, impacttypes, endeavourtypes, impactcat)
+
 REF_counts <- 
   REF |> 
-  make_long(Assessment_Unit, Impact_Type, Impacted)
+  mutate(Impacted = str_replace_all(Impacted, "Int organisations", "International"),
+         Impacted = str_replace_all(Impacted, "Int governance", "International"),
+         Impacted = str_replace_all(Impacted, "Int Gov", "International"),
+         Impacted = str_replace_all(Impacted, "UK society", "other UK"),
+         Impacted = str_replace_all(Impacted, "UK organisations", "other UK"),
+         Impacted = str_replace_all(Impacted, "UK governance", "other UK")
+         ) |> 
+  select(Assessment_Unit, Impact_Type, Country, Endeavour_Type, Impacted) |> 
+  make_long(Assessment_Unit, Endeavour_Type, Impacted, Impact_Type) |> 
+  mutate(node = factor(node, levels = sankeylevels))
 
-nodenames <- c("Unit of assessment name", "Summary impact type", "My impact category")
+nodenames <- c("Unit of assessment name", 
+               "My endeavour Type", 
+               "My impact category", 
+               "Summary impact type")
 
 ggplot(
   REF_counts,
@@ -87,6 +128,6 @@ ggplot(
         axis.text.x=element_text(size=10)) +
   guides(fill = guide_legend(ncol = 2))
 
-ggsave(here("figures/REF_extract_sankey.png"))
+ggsave(here("figures/REF_extract_sankey.png"), width = 10, height = 5)
 
 ```
